@@ -27,16 +27,32 @@ const reportRoutes = require('./routes/reportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 
+// Mount routes for both Local Server (/api/*) and Vercel Serverless Function (/*)
 app.use('/api/auth', authRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/charts', chartRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/settings', settingsRoutes);
+app.use('/auth', authRoutes);
 
-app.get('/api/health', (req, res) => {
+app.use('/api/categories', categoryRoutes);
+app.use('/categories', categoryRoutes);
+
+app.use('/api/transactions', transactionRoutes);
+app.use('/transactions', transactionRoutes);
+
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/dashboard', dashboardRoutes);
+
+app.use('/api/charts', chartRoutes);
+app.use('/charts', chartRoutes);
+
+app.use('/api/reports', reportRoutes);
+app.use('/reports', reportRoutes);
+
+app.use('/api/notifications', notificationRoutes);
+app.use('/notifications', notificationRoutes);
+
+app.use('/api/settings', settingsRoutes);
+app.use('/settings', settingsRoutes);
+
+app.get(['/api/health', '/health'], (req, res) => {
   res.json({ status: 'ok', message: 'Personal Finance API Server is running' });
 });
 
