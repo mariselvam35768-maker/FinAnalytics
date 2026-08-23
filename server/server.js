@@ -40,12 +40,13 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Personal Finance API Server is running' });
 });
 
-// Initialize Database & Start Server
-initDB().then(() => {
+// Initialize Database & Start Server for local execution
+initDB().catch(err => console.error('DB Init Error:', err));
+
+if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
-    console.log(`📡 Healthcheck: http://localhost:${PORT}/api/health`);
   });
-}).catch(err => {
-  console.error('Failed to initialize database:', err);
-});
+}
+
+module.exports = app;
