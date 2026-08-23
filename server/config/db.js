@@ -1,4 +1,3 @@
-const mysql = require('mysql2/promise');
 const path = require('path');
 const fs = require('fs');
 
@@ -49,9 +48,10 @@ async function initDB() {
   const dbName = process.env.DB_NAME || 'finance_dashboard';
   const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV;
 
-  // 1. Try MySQL if configured
+  // 1. Try MySQL if host configured
   if (dbHost && dbHost !== 'localhost') {
     try {
+      const mysql = require('mysql2/promise');
       pool = mysql.createPool({
         host: dbHost,
         user: dbUser,
@@ -70,7 +70,7 @@ async function initDB() {
     }
   }
 
-  // 2. If running on Vercel Serverless, use Pure JS Storage Engine directly (Zero native C++ binary module load!)
+  // 2. If running on Vercel Serverless, use Pure JS Storage Engine directly
   if (isVercel) {
     dbMode = 'jsdb';
     const jsonPath = path.join('/tmp', 'db.json');
