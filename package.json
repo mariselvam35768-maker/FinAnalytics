@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "Personal Finance Analytics Dashboard (React + Node.js)",
   "private": true,
+  "main": "api/index.js",
   "scripts": {
     "start": "npm run dev --prefix server",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
-    "dev": "npm run dev --prefix server"
+    "dev": "npm run dev --prefix server",
+    "build": "cd client && npm install && npm run build"
   }
 }
