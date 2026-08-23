@@ -5,7 +5,19 @@ const { JWT_SECRET } = require('../middleware/authMiddleware');
 
 async function register(req, res) {
   try {
-    const { full_name, email, password, currency, monthly_budget } = req.body;
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) {}
+    }
+    if (!body || typeof body !== 'object') {
+      body = {};
+    }
+
+    const full_name = body.full_name || '';
+    const email = body.email || '';
+    const password = body.password || '';
+    const currency = body.currency || '₹';
+    const monthly_budget = body.monthly_budget || 0;
 
     if (!full_name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Please provide name, email, and password.' });
@@ -15,24 +27,24 @@ async function register(req, res) {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
     }
 
-    const existing = await query('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    const cleanEmail = email.toLowerCase().trim();
+    const existing = await query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
     if (existing && existing.length > 0) {
       return res.status(400).json({ success: false, message: 'Email already registered.' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const userCurrency = currency || '₹';
-    const budget = parseFloat(monthly_budget || 0.00) || 0;
+    const budget = parseFloat(monthly_budget || 0) || 0;
 
     const result = await query(
       `INSERT INTO users (full_name, email, password, currency, monthly_budget) VALUES (?, ?, ?, ?, ?)`,
-      [full_name.trim(), email.toLowerCase().trim(), hashedPassword, userCurrency, budget]
+      [full_name.trim(), cleanEmail, hashedPassword, currency, budget]
     );
 
-    let userId = result[0]?.insertId || result?.insertId;
+    let userId = Array.isArray(result) ? (result[0]?.insertId || result[0]?.id) : (result?.insertId || result?.id);
     if (!userId) {
-      const inserted = await query('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
-      userId = inserted[0]?.id;
+      const inserted = await query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
+      userId = inserted[0]?.id || Date.now();
     }
 
     // Create welcome notification
@@ -42,34 +54,55 @@ async function register(req, res) {
         [userId, 'Welcome to Dashboard', 'Thank you for registering! Start tracking your personal finances today.']
       );
     } catch (nErr) {
-      console.warn('Welcome notification error:', nErr.message);
+      console.warn('Welcome notification warning:', nErr.message);
     }
 
-    const token = jwt.sign({ id: userId, email: email.toLowerCase().trim() }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: userId, email: cleanEmail }, JWT_SECRET, { expiresIn: '7d' });
 
-    const users = await query('SELECT id, full_name, email, phone, avatar, currency, language, theme, monthly_budget, created_at FROM users WHERE id = ?', [userId]);
+    let userObj = {
+      id: userId,
+      full_name: full_name.trim(),
+      email: cleanEmail,
+      currency: currency,
+      monthly_budget: budget,
+      language: 'en',
+      theme: 'dark'
+    };
+
+    try {
+      const users = await query('SELECT id, full_name, email, phone, avatar, currency, language, theme, monthly_budget, created_at FROM users WHERE id = ?', [userId]);
+      if (users && users[0]) userObj = users[0];
+    } catch (uErr) {}
 
     return res.json({
       success: true,
       message: 'Registration successful!',
       token,
-      user: users[0] || { id: userId, full_name, email }
+      user: userObj
     });
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('Register controller error:', error);
     return res.status(500).json({ success: false, message: error.message || 'Server error during registration.' });
   }
 }
 
 async function login(req, res) {
   try {
-    const { email, password } = req.body;
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) {}
+    }
+    if (!body || typeof body !== 'object') body = {};
+
+    const email = body.email || '';
+    const password = body.password || '';
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Please provide email and password.' });
     }
 
-    const users = await query('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    const cleanEmail = email.toLowerCase().trim();
+    const users = await query('SELECT * FROM users WHERE email = ?', [cleanEmail]);
     if (!users || users.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
@@ -97,7 +130,7 @@ async function login(req, res) {
       user
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login controller error:', error);
     return res.status(500).json({ success: false, message: error.message || 'Server error during login.' });
   }
 }
@@ -121,7 +154,12 @@ async function getProfile(req, res) {
 async function updateProfile(req, res) {
   try {
     const userId = req.user.id;
-    const { full_name, phone, currency, language, theme, monthly_budget } = req.body;
+    let body = req.body || {};
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) {}
+    }
+
+    const { full_name, phone, currency, language, theme, monthly_budget } = body;
 
     await query(
       `UPDATE users SET 
@@ -147,7 +185,12 @@ async function updateProfile(req, res) {
 async function changePassword(req, res) {
   try {
     const userId = req.user.id;
-    const { current_password, new_password } = req.body;
+    let body = req.body || {};
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) {}
+    }
+
+    const { current_password, new_password } = body;
 
     if (!current_password || !new_password) {
       return res.status(400).json({ success: false, message: 'Current and new passwords are required.' });
