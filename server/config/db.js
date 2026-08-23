@@ -5,7 +5,7 @@ const fs = require('fs');
 let pool = null;
 let sqliteDb = null;
 let jsDb = null;
-let dbMode = 'mysql'; // 'mysql', 'sqlite', 'jsdb'
+let dbMode = 'jsdb'; // 'mysql', 'sqlite', 'jsdb'
 let initPromise = null;
 
 const defaultCategories = [
@@ -47,8 +47,9 @@ async function initDB() {
   const dbUser = process.env.DB_USER || 'root';
   const dbPass = process.env.DB_PASSWORD || '';
   const dbName = process.env.DB_NAME || 'finance_dashboard';
+  const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV;
 
-  // 1. Try MySQL if host configured
+  // 1. Try MySQL if configured
   if (dbHost && dbHost !== 'localhost') {
     try {
       pool = mysql.createPool({
@@ -69,13 +70,19 @@ async function initDB() {
     }
   }
 
-  // 2. Try native SQLite3
+  // 2. If running on Vercel Serverless, use Pure JS Storage Engine directly (Zero native C++ binary module load!)
+  if (isVercel) {
+    dbMode = 'jsdb';
+    const jsonPath = path.join('/tmp', 'db.json');
+    initJsDb(jsonPath);
+    console.log('✅ Vercel Serverless Pure JS Storage Engine ready at:', jsonPath);
+    return;
+  }
+
+  // 3. Try native SQLite3 locally
   try {
     const sqlite3 = require('sqlite3').verbose();
-    const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
-    const dbPath = isVercel
-      ? path.join('/tmp', 'database.sqlite')
-      : path.join(__dirname, '../database.sqlite');
+    const dbPath = path.join(__dirname, '../database.sqlite');
 
     sqliteDb = new sqlite3.Database(dbPath);
 
@@ -156,14 +163,16 @@ async function initDB() {
     console.log('✅ SQLite database initialized successfully.');
     return;
   } catch (sqliteErr) {
-    console.log('⚠️ Native SQLite3 failed (Vercel serverless fallback triggered):', sqliteErr.message);
+    console.log('⚠️ Native SQLite3 failed, using JS DB fallback:', sqliteErr.message);
   }
 
-  // 3. Fallback: Pure JS File/Memory Store (Zero C++ dependency)
+  // 4. Local JS DB Fallback
   dbMode = 'jsdb';
-  const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
-  const jsonPath = isVercel ? path.join('/tmp', 'db.json') : path.join(__dirname, '../db.json');
+  const jsonPath = path.join(__dirname, '../db.json');
+  initJsDb(jsonPath);
+}
 
+function initJsDb(jsonPath) {
   let initialData = {
     users: [],
     categories: defaultCategories,
@@ -182,12 +191,11 @@ async function initDB() {
     jsDb = initialData;
     try { fs.writeFileSync(jsonPath, JSON.stringify(jsDb, null, 2)); } catch (e) {}
   }
-  console.log('✅ Pure JS Storage Engine initialized at:', jsonPath);
 }
 
 function saveJsDb() {
   if (dbMode !== 'jsdb' || !jsDb) return;
-  const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
+  const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV;
   const jsonPath = isVercel ? path.join('/tmp', 'db.json') : path.join(__dirname, '../db.json');
   try {
     fs.writeFileSync(jsonPath, JSON.stringify(jsDb, null, 2));
@@ -266,6 +274,12 @@ async function query(sql, params = []) {
 
   // JS DB Engine (Zero Native Binary dependencies)
   if (dbMode === 'jsdb') {
+    if (!jsDb) {
+      const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV;
+      const jsonPath = isVercel ? path.join('/tmp', 'db.json') : path.join(__dirname, '../db.json');
+      initJsDb(jsonPath);
+    }
+
     const s = sql.trim();
     
     // Select users by email
