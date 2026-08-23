@@ -1,10 +1,12 @@
 const mysql = require('mysql2/promise');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 
 let pool = null;
 let sqliteDb = null;
 let isSqlite = false;
+let initPromise = null;
 
 const defaultCategories = [
   // Expense
@@ -41,122 +43,140 @@ const defaultCategories = [
 ];
 
 async function initDB() {
-  const dbHost = process.env.DB_HOST || 'localhost';
+  const dbHost = process.env.DB_HOST || '';
   const dbUser = process.env.DB_USER || 'root';
   const dbPass = process.env.DB_PASSWORD || '';
   const dbName = process.env.DB_NAME || 'finance_dashboard';
 
-  try {
-    pool = mysql.createPool({
-      host: dbHost,
-      user: dbUser,
-      password: dbPass,
-      database: dbName,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
-    });
-    
-    await pool.query('SELECT 1');
-    console.log('✅ Connected to MySQL database:', dbName);
-    isSqlite = false;
-  } catch (mysqlErr) {
-    console.log('⚠️ MySQL connection failed. Falling back to SQLite file database...');
-    isSqlite = true;
-
-    const dbPath = path.join(__dirname, '../database.sqlite');
-    sqliteDb = new sqlite3.Database(dbPath);
-
-    await runSqlite(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        phone TEXT DEFAULT NULL,
-        avatar TEXT DEFAULT NULL,
-        currency TEXT NOT NULL DEFAULT '₹',
-        language TEXT NOT NULL DEFAULT 'en',
-        theme TEXT NOT NULL DEFAULT 'dark',
-        monthly_budget REAL NOT NULL DEFAULT 0.00,
-        reset_token TEXT DEFAULT NULL,
-        reset_expires TEXT DEFAULT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await runSqlite(`
-      CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        icon TEXT NOT NULL DEFAULT 'tag',
-        color TEXT NOT NULL DEFAULT '#6c757d',
-        is_default INTEGER NOT NULL DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await runSqlite(`
-      CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        category_id INTEGER NOT NULL,
-        type TEXT NOT NULL,
-        amount REAL NOT NULL,
-        description TEXT DEFAULT NULL,
-        transaction_date TEXT NOT NULL,
-        payment_method TEXT DEFAULT 'Cash',
-        reference TEXT DEFAULT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (category_id) REFERENCES categories(id)
-      )
-    `);
-
-    await runSqlite(`
-      CREATE TABLE IF NOT EXISTS budgets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        category_id INTEGER DEFAULT NULL,
-        amount REAL NOT NULL,
-        month INTEGER NOT NULL,
-        year INTEGER NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `);
-
-    await runSqlite(`
-      CREATE TABLE IF NOT EXISTS notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        type TEXT NOT NULL DEFAULT 'info',
-        title TEXT NOT NULL,
-        message TEXT NOT NULL,
-        is_read INTEGER NOT NULL DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `);
-
-    const catCount = await getSqlite('SELECT COUNT(*) as count FROM categories');
-    if (!catCount || catCount.count === 0) {
-      for (const cat of defaultCategories) {
-        await runSqlite(
-          'INSERT INTO categories (name, type, icon, color) VALUES (?, ?, ?, ?)',
-          [cat.name, cat.type, cat.icon, cat.color]
-        );
-      }
-      console.log('✅ Seeded default categories into SQLite database.');
+  // If MySQL credentials are explicitly provided, connect to MySQL
+  if (dbHost && dbHost !== 'localhost') {
+    try {
+      pool = mysql.createPool({
+        host: dbHost,
+        user: dbUser,
+        password: dbPass,
+        database: dbName,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0
+      });
+      await pool.query('SELECT 1');
+      console.log('✅ Connected to MySQL database:', dbName);
+      isSqlite = false;
+      return;
+    } catch (mysqlErr) {
+      console.log('⚠️ MySQL connection failed:', mysqlErr.message);
     }
-
-    console.log('✅ SQLite database initialized successfully at database.sqlite');
   }
+
+  // Fallback to SQLite (using /tmp on Vercel or local directory)
+  isSqlite = true;
+  const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
+  const dbPath = isVercel
+    ? path.join('/tmp', 'database.sqlite')
+    : path.join(__dirname, '../database.sqlite');
+
+  console.log(`✅ Initializing SQLite DB at path: ${dbPath}`);
+  sqliteDb = new sqlite3.Database(dbPath);
+
+  await runSqlite(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      phone TEXT DEFAULT NULL,
+      avatar TEXT DEFAULT NULL,
+      currency TEXT NOT NULL DEFAULT '₹',
+      language TEXT NOT NULL DEFAULT 'en',
+      theme TEXT NOT NULL DEFAULT 'dark',
+      monthly_budget REAL NOT NULL DEFAULT 0.00,
+      reset_token TEXT DEFAULT NULL,
+      reset_expires TEXT DEFAULT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await runSqlite(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      icon TEXT NOT NULL DEFAULT 'tag',
+      color TEXT NOT NULL DEFAULT '#6c757d',
+      is_default INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await runSqlite(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      category_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT DEFAULT NULL,
+      transaction_date TEXT NOT NULL,
+      payment_method TEXT DEFAULT 'Cash',
+      reference TEXT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES categories(id)
+    )
+  `);
+
+  await runSqlite(`
+    CREATE TABLE IF NOT EXISTS budgets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      category_id INTEGER DEFAULT NULL,
+      amount REAL NOT NULL,
+      month INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await runSqlite(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL DEFAULT 'info',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      is_read INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  const catCount = await getSqlite('SELECT COUNT(*) as count FROM categories');
+  if (!catCount || catCount.count === 0) {
+    for (const cat of defaultCategories) {
+      await runSqlite(
+        'INSERT INTO categories (name, type, icon, color) VALUES (?, ?, ?, ?)',
+        [cat.name, cat.type, cat.icon, cat.color]
+      );
+    }
+    console.log('✅ Seeded default categories into SQLite database.');
+  }
+}
+
+function ensureDB() {
+  if (!initPromise) {
+    initPromise = initDB().catch(err => {
+      console.error('initDB error:', err);
+      initPromise = null;
+      throw err;
+    });
+  }
+  return initPromise;
 }
 
 function runSqlite(sql, params = []) {
@@ -187,6 +207,8 @@ function allSqlite(sql, params = []) {
 }
 
 async function query(sql, params = []) {
+  await ensureDB();
+
   if (isSqlite) {
     let adaptedSql = sql
       .replace(/MONTH\(CURDATE\(\)\)/gi, "cast(strftime('%m', 'now', 'localtime') as integer)")
@@ -214,4 +236,4 @@ async function query(sql, params = []) {
   }
 }
 
-module.exports = { initDB, query };
+module.exports = { initDB, ensureDB, query };

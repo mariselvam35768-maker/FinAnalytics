@@ -22,20 +22,28 @@ async function register(req, res) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const userCurrency = currency || '₹';
-    const budget = monthly_budget || 0.00;
+    const budget = parseFloat(monthly_budget || 0.00) || 0;
 
     const result = await query(
       `INSERT INTO users (full_name, email, password, currency, monthly_budget) VALUES (?, ?, ?, ?, ?)`,
       [full_name.trim(), email.toLowerCase().trim(), hashedPassword, userCurrency, budget]
     );
 
-    const userId = result.insertId || (await query('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]))[0]?.id;
+    let userId = result[0]?.insertId || result?.insertId;
+    if (!userId) {
+      const inserted = await query('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+      userId = inserted[0]?.id;
+    }
 
     // Create welcome notification
-    await query(
-      `INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'info', ?, ?)`,
-      [userId, 'Welcome to Dashboard', 'Thank you for registering! Start tracking your personal finances today.']
-    );
+    try {
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'info', ?, ?)`,
+        [userId, 'Welcome to Dashboard', 'Thank you for registering! Start tracking your personal finances today.']
+      );
+    } catch (nErr) {
+      console.warn('Welcome notification error:', nErr.message);
+    }
 
     const token = jwt.sign({ id: userId, email: email.toLowerCase().trim() }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -45,11 +53,11 @@ async function register(req, res) {
       success: true,
       message: 'Registration successful!',
       token,
-      user: users[0]
+      user: users[0] || { id: userId, full_name, email }
     });
   } catch (error) {
     console.error('Register error:', error);
-    return res.status(500).json({ success: false, message: 'Server error during registration.' });
+    return res.status(500).json({ success: false, message: error.message || 'Server error during registration.' });
   }
 }
 
@@ -90,7 +98,7 @@ async function login(req, res) {
     });
   } catch (error) {
     console.error('Login error:', error);
-    return res.status(500).json({ success: false, message: 'Server error during login.' });
+    return res.status(500).json({ success: false, message: error.message || 'Server error during login.' });
   }
 }
 
