@@ -104,24 +104,40 @@ export default function Sidebar({ isOpen, onClose }) {
               </NavLink>
             );
           })}
-        </nav>
 
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="btn btn-secondary"
-          style={{
-            width: '100%',
-            justifyContent: 'flex-start',
-            gap: '0.75rem',
-            color: '#f87171',
-            borderColor: 'rgba(239, 68, 68, 0.2)',
-            marginTop: '1rem'
-          }}
-        >
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
+          {/* Logout Option directly below Settings */}
+          <button
+            onClick={handleLogout}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              padding: '0.65rem 0.85rem',
+              borderRadius: '10px',
+              color: '#f87171',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.18)',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.88rem',
+              marginTop: '0.5rem',
+              transition: 'all 0.2s ease',
+              textAlign: 'left',
+              width: '100%'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.16)';
+              e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+              e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.18)';
+            }}
+          >
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
+        </nav>
       </aside>
     </>
   );
