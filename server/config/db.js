@@ -159,6 +159,17 @@ async function initDB() {
       }
     }
 
+    const userCount = await getSqlite('SELECT COUNT(*) as count FROM users');
+    if (!userCount || userCount.count === 0) {
+      const bcrypt = require('bcryptjs');
+      const hashedPass = await bcrypt.hash('password123', 10);
+      await runSqlite(
+        `INSERT INTO users (full_name, email, password, currency, monthly_budget) VALUES (?, ?, ?, ?, ?)`,
+        ['Demo User', 'demo@example.com', hashedPass, '₹', 50000]
+      );
+      console.log('✅ Default demo user seeded in SQLite: demo@example.com / password123');
+    }
+
     dbMode = 'sqlite';
     console.log('✅ SQLite database initialized successfully.');
     return;
@@ -190,6 +201,27 @@ function initJsDb(jsonPath) {
   } else {
     jsDb = initialData;
     try { fs.writeFileSync(jsonPath, JSON.stringify(jsDb, null, 2)); } catch (e) {}
+  }
+
+  if (!jsDb.users || jsDb.users.length === 0) {
+    const bcrypt = require('bcryptjs');
+    const hashedPass = bcrypt.hashSync('password123', 10);
+    jsDb.users = [{
+      id: 1,
+      full_name: 'Demo User',
+      email: 'demo@example.com',
+      password: hashedPass,
+      currency: '₹',
+      monthly_budget: 50000,
+      phone: null,
+      avatar: null,
+      language: 'en',
+      theme: 'dark',
+      is_active: 1,
+      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    }];
+    saveJsDb();
+    console.log('✅ Default demo user seeded in JS DB: demo@example.com / password123');
   }
 }
 

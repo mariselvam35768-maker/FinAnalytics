@@ -12,7 +12,11 @@ export const AuthProvider = ({ children }) => {
     const savedUser = localStorage.getItem('user');
 
     if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        setUser(null);
+      }
       // Refresh profile in background
       api.get('/auth/profile')
         .then(res => {
@@ -21,10 +25,13 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('user', JSON.stringify(res.data.user));
           }
         })
-        .catch(() => {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setUser(null);
+        .catch(err => {
+          // Only clear session if token is explicitly invalid/unauthorized (401 or 403)
+          if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          }
         })
         .finally(() => setLoading(false));
     } else {
@@ -37,6 +44,7 @@ export const AuthProvider = ({ children }) => {
     if (res.data.success) {
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
+      localStorage.setItem('lastRegisteredEmail', email);
       setUser(res.data.user);
     }
     return res.data;
@@ -47,6 +55,9 @@ export const AuthProvider = ({ children }) => {
     if (res.data.success) {
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
+      if (userData && userData.email) {
+        localStorage.setItem('lastRegisteredEmail', userData.email);
+      }
       setUser(res.data.user);
     }
     return res.data;

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Wallet, UserPlus } from 'lucide-react';
+import { Wallet, UserPlus, LogIn } from 'lucide-react';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -44,23 +44,77 @@ export default function Register() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '1.5rem'
+      padding: '1.5rem',
+      background: 'radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 40%), radial-gradient(circle at bottom left, rgba(99, 102, 241, 0.08), transparent 40%)'
     }}>
       <div className="glass-card" style={{ width: '100%', maxWidth: '480px', padding: '2.5rem' }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        
+        {/* Navigation Tabs */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '0.5rem',
+          background: 'rgba(255, 255, 255, 0.04)',
+          padding: '4px',
+          borderRadius: '12px',
+          marginBottom: '2rem',
+          border: '1px solid var(--border-color)'
+        }}>
+          <button
+            onClick={() => navigate('/login')}
+            style={{
+              padding: '0.6rem',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              cursor: 'pointer'
+            }}
+          >
+            <LogIn size={15} />
+            <span>Sign In</span>
+          </button>
+          <button
+            style={{
+              padding: '0.6rem',
+              borderRadius: '8px',
+              border: 'none',
+              background: '#10b981',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              cursor: 'pointer'
+            }}
+          >
+            <UserPlus size={15} />
+            <span>Register</span>
+          </button>
+        </div>
+
+        <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
           <div style={{
             display: 'inline-flex',
             background: 'linear-gradient(135deg, #10b981, #059669)',
             padding: '0.8rem',
             borderRadius: '16px',
             boxShadow: '0 0 20px rgba(16, 185, 129, 0.4)',
-            marginBottom: '1rem'
+            marginBottom: '0.75rem'
           }}>
             <Wallet size={32} color="#fff" />
           </div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Create Account</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-            Start tracking your finance analytics today
+            Register once to save your finances & access anytime
           </p>
         </div>
 
